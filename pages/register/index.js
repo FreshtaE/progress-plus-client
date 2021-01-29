@@ -1,5 +1,8 @@
 // Registration page for user to submit a form with details
 // submit button sends the user information to database
+
+import { useEffect, useState } from 'react';
+
 import { backendUrl } from '../../libs/globalVariables/urls';
 import { useAuthContext } from '../../firebaseUtils/useAuthContext';
 import nookies from 'nookies';
@@ -25,13 +28,20 @@ import {
 
 export default function Register({ session }) {
   const { logOut, router } = useAuthContext();
+  const [serverErr, setServerErr] = useState(null);
   //we are using router to redirect the user after register to the coach/bootcamper page
   const valuesInitialState = {
     role: '',
     cohort: 0,
     forename: '',
+    uid: `${session.uid}`,
+  };
+
+  // what fields we want cleared after submit
+  const resetState = {
+    //role: '',
+    cohort: 0,
     surname: '',
-    uid: session.uid,
   };
   let { token } = session;
 
@@ -44,31 +54,26 @@ export default function Register({ session }) {
     isSubmitting,
     values,
     errors,
+    postSuccessful,
   } = useFormSubmit(
     valuesInitialState,
+    resetState,
     validateRegisterForm,
     registerUser,
-    token
+    token,
+    setServerErr
   );
 
-  // console.log(values);
+  /*  useEffect(() => {
+    if (postSuccessful) {
+      Router.push(`/${values.role.toLowerCase()}`);
+    }
+  }); */
+
   return (
     <div className={styles.body}>
       <LoginBackgroundImg />
-      <div>
-        {/* if errors, they will be displayed here
-        {errors
-          ? () => {
-              for (const [key, value] of Object.entries(errors)) {
-                return (
-                  <p key={key} className={styles.errortext}>
-                    {value}
-                  </p>
-                );
-              }
-            }
-          : null} */}
-      </div>
+
       <div className={styles.registerForm}>
         <img
           className={styles.profilePicture}
@@ -92,14 +97,30 @@ export default function Register({ session }) {
               handleClick={dropDownHandleChange}
             />
           )}
+          {/* if errors, they will be displayed here */}
+          {errors && (
+            <div>
+              {errors.forename && (
+                <p className={styles.errorText}>{errors.forename}</p>
+              )}
+              {errors.surname && (
+                <p className={styles.errorText}>{errors.surname}</p>
+              )}
+              {errors.role && <p className={styles.errorText}>{errors.role}</p>}
+              {errors.cohort && (
+                <p className={styles.errorText}>{errors.cohort}</p>
+              )}
+              {errors.uid && <p className={styles.errorText}>{errors.uid}</p>}
+              {serverErr && <p className={styles.errorText}>{serverErr}</p>}
+            </div>
+          )}
 
           <RegisterButton
+            {...submitButtonProps}
             disabled={isSubmitting}
             handleClick={(e) => {
               handleSubmit(e);
-              router.push(`/${values.role.toLowerCase()}`);
             }}
-            {...submitButtonProps}
           />
 
           <RegisterButton handleClick={logOut} {...logOutButtonProps} />
@@ -116,27 +137,31 @@ export async function getServerSideProps(context) {
     const sessionData = await verifyIdToken(cookies.token);
 
     let { name, uid, email, picture } = sessionData;
-
     //if user has no name on GitHub, name will be set to 'No name ❗ to test the functionality remove the exclamation mark'
+    console.log({ sessionData });
     if (!name) {
       name = 'No name';
     }
 
-    //❗ redirect works fine to be uncommented after testing register page
-    //checking if the user already has an account, if they do then it will redirect them to the appropriate page (bootcamper/coach)
-    // const res = await fetch(`${backendUrl}${uid}`);
-    // const data = await res.json();
-    // if (data.success === true) {
-    //   context.res.writeHead(302, {
-    //     Location: `/${data.data[0].role.toLowerCase()}`,
-    //   });
-    //   context.res.end();
-    // }
+    // ❗ redirect works fine to be uncommented after testing register page
+    // checking if the user already has an account, if they do then it will redirect them to the appropriate page (bootcamper/coach)
+    const res = await fetch(`${backendUrl}${uid}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    console.log(data);
+    if (data.success === true && data.data[0] !== undefined) {
+      context.res.writeHead(302, {
+        Location: `/${data.data[0].role.toLowerCase()}`,
+      });
+      context.res.end();
+    }
 
     return {
       props: { session: { name, uid, email, picture, token } },
     };
   } catch (err) {
+    console.log(err);
     context.res.writeHead(302, {
       Location: `/`,
     });
